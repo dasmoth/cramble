@@ -88,3 +88,6 @@
     (vec
      (for [i (range cnt)]
        (type stream)))))
+
+(defn read-bool [stream]
+  (not= (read-byte stream) 0))

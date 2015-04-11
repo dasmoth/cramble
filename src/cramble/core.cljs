@@ -2,8 +2,17 @@
   (:require [cljs.core.async :refer [put! close! chan]]
             [cramble.fetch :refer (get-binary-range)]
             [cramble.bin :as b]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [cramble.encodings :as enc])
   (:require-macros [cljs.core.async.macros :refer [go]]))
+
+(def fromCharCode (.-fromCharCode js/String))
+
+(defn array-to-string [ba]
+  (.apply fromCharCode nil ba))
+
+(defn read-nstr [n stream]
+  (.apply fromCharCode nil (clj->js (for [i (range n)] (b/read-byte stream)))))
 
 (defn- parse-block [stream]
   (let [method     (b/read-byte stream)
@@ -37,10 +46,88 @@
      :landmarks   landmarks
      :length      length}))
 
-(def fromCharCode (.-fromCharCode js/String))
+(defn- read-map [stream key-reader fmtmap]
+  (let [size (b/read-itf8 stream)
+        n    (b/read-itf8 stream)]
+    (loop [cnt    0
+           result {}]
+      (if (>= cnt n)
+        result
+        (let [key (key-reader stream)
+              fmt (fmtmap key)]
+          (println key)
+          (if fmt
+            (recur 
+             (inc cnt)
+             (assoc result key (fmt stream)))
+            (do
+              (println "Unknown key" key)
+              result)))))))
 
-(defn array-to-string [ba]
-  (.apply fromCharCode nil ba))
+(def ^:private pres-map-format
+  {"RN" b/read-bool
+   "AP" b/read-bool
+   "RR" b/read-bool
+   "TD" (partial b/read-array b/read-byte)    ;; needs more?
+   "SM" (fn [stream]
+          (vec (for [i (range 5)] (b/read-byte stream))))})
+
+(def ^:private dse-map-format*
+  {"BF" enc/read-int-encoding
+   "AP" enc/read-int-encoding
+   "FP" enc/read-int-encoding
+   "RL" enc/read-int-encoding
+   "DL" enc/read-int-encoding
+   "NF" enc/read-int-encoding
+   "BA" enc/read-byte-encoding
+   "QS" enc/read-byte-encoding
+   "FC" enc/read-byte-encoding
+   "FN" enc/read-int-encoding
+   "BS" enc/read-byte-encoding
+   "IN" enc/read-byte-array-encoding
+   "RG" enc/read-int-encoding
+   "MQ" enc/read-int-encoding
+   "TL" enc/read-int-encoding
+   "RN" enc/read-byte-array-encoding
+   "NS" enc/read-int-encoding
+   "NP" enc/read-int-encoding
+   "TS" enc/read-int-encoding
+   "MF" enc/read-int-encoding
+   "CF" enc/read-int-encoding
+   "TM" enc/read-int-encoding
+   "RI" enc/read-int-encoding
+   "RS" enc/read-int-encoding
+   "PD" enc/read-int-encoding
+   "HC" enc/read-int-encoding
+   "SC" enc/read-byte-array-encoding})
+
+(defn- dse-map-format [key]
+  (or (dse-map-format* key)
+      (fn [stream]
+        (let [e (b/read-byte stream)
+              param-len (b/read-itf8 stream)]
+          (b/skip-bytes stream param-len)
+          {:type :unknown :e e}))))
+
+(defn parse-comp-header [data]
+  (let [data     (b/make-binary-stream data)
+        pres-map (read-map data (partial read-nstr 2) pres-map-format)
+        dse-map  (read-map data (partial read-nstr 2) dse-map-format)
+        tag-map  (read-map 
+                    data
+                    (fn [stream]
+                      (let [k (b/read-itf8 stream)]
+                        (.fromCharArray 
+                           js/String
+                           (bit-and (bit-shift-right k 16) 0xff)
+                           (bit-and (bit-shift-right k 8) 0xff)
+                           (bit-and k 0xff))))
+                    (constantly enc/read-byte-array-encoding))]
+    {:pres-map pres-map
+     :dse-map  dse-map
+     :tag-map  tag-map}))
+
+
 
 (defn read-cram
   "Read headers from a CRAM file at uri.  Returns a promise channel which will
