@@ -3,7 +3,9 @@
             [cramble.fetch :refer (get-binary-range)]
             [cramble.bin :as b]
             [clojure.string :as str]
-            [cramble.encodings :as enc])
+            [cramble.encodings :as enc]
+            [clojure.browser.repl :as repl]
+            [jszlib :as zlib])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 (def fromCharCode (.-fromCharCode js/String))
@@ -128,6 +130,20 @@
      :tag-map  tag-map}))
 
 
+(defn read-container
+  [uri offset]
+  (println "In read-container" uri offset)
+  (go
+    (let [ch-data     (->> (get-binary-range uri offset (+ offset 1000))
+                           (<!)
+                           (b/make-binary-stream))
+          header      (parse-container ch-data)
+          b1-head     (parse-block ch-data)
+          b1-start    (+ offset (b/tell ch-data))
+          comp-header (->> (get-binary-range uri b1-start (+ b1-start (:size b1-head)))
+                           (<!)
+                           (parse-comp-header))]
+      (assoc header :comp comp-header))))
 
 (defn read-cram
   "Read headers from a CRAM file at uri.  Returns a promise channel which will
@@ -155,17 +171,46 @@
                              (<!)
                              (b/make-binary-stream))
              c1-head    (parse-container c1-stream)
+             c2-start   (+ c1-start (b/tell c1-stream) (:length c1-head))
              b1-head    (parse-block c1-stream)
              b1-start   (+ c1-start (b/tell c1-stream))
              bam-header (->> (get-binary-range uri (+ b1-start 4) (+ b1-start (:size b1-head)))
                              (<!)
                              (js/Uint8Array.)
                              (array-to-string))]
-         {:major major
+         {:uri uri
+          :major major
           :minor minor
           :name name
           :bam-header bam-header
-          :c2-offset (+ (:blocks-start c1-head) (:length c1-head))})))))
-    
-    
-    
+          :c2-offset c2-start})))))
+  
+(defrecord CRAIRecord 
+    [seq-id 
+     ali-start 
+     ali-span 
+     container-start 
+     slice-start
+     slice-len])
+  
+(defn read-crai
+  [uri]
+  (go
+    (->>
+     (-> (get-binary-range uri)
+         (<!)
+         (js/jszlib_inflate_buffer 10)
+         (js/Uint8Array.)
+         (array-to-string)
+         (str/split #"\n"))
+     (map
+      (fn [line]
+        (let [[seq-id ali-start ali-span container-start slice-start slice-len]
+              (str/split line #"\t")]
+          (CRAIRecord. 
+           (js/parseInt seq-id)
+           (js/parseInt ali-start)
+           (js/parseInt ali-span)
+           (js/parseInt container-start)
+           (js/parseInt slice-start)
+           (js/parseInt slice-len))))))))

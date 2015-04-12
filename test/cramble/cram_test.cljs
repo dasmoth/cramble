@@ -4,7 +4,7 @@
                     :refer (is deftest testing done)])
   (:require [cljs.core.async :refer [put! close! chan]]
             [cemerick.cljs.test :as t]
-            [cramble.core :refer (read-cram)]))
+            [cramble.core :refer (read-cram read-container read-crai)]))
 
 (deftest ^:async test-bad-cram 
   (go
@@ -16,5 +16,18 @@
   (go 
     (let [cram (<! (read-cram "http://www.biodalliance.org/datasets/cramtests/tiny.cram"))]
       (is (= (:name cram) "tiny.sam"))
-      (println (:bam-header cram))
+      ;; somethign with header
+      (let [container (<! (read-container (:uri cram) (:c2-offset cram)))]
+        (println (keys container))
+        (is container)
+        (println (keys (:comp container)))
+        (println (:pres-map (:comp container)))
+        (println (keys (:dse-map (:comp container))))
+        (done)))))
+
+(deftest ^:async test-connect-crai
+  (go
+    (let [crai (<! (read-crai "http://www.biodalliance.org/datasets/cramtests/tiny.cram.crai"))]
+      (is crai)
+      (println crai)
       (done))))

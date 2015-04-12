@@ -17,7 +17,10 @@
     :builds [{:id "dev"
               :source-paths ["src" "test"]
               :compiler {
-                :output-to "target/cljs/testable.js"}}]
+                :output-to "target/cljs/testable.js"
+                :externs ["jszlib-externs.js"]
+                :foreign-libs [{:file "jszlib/js/inflate.js"
+                                :provides ["jszlib"]}]}}]
      :test-commands {"unit-tests" ["slimerjs" :runner 
                                    "target/cljs/testable.js"]}})
               
