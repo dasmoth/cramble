@@ -19,7 +19,6 @@
         xhr
         "load"
         (fn []
-          (println "onload" (.-status xhr))
           (let [r (.-response xhr)]
             (put! chan r)
             (close! chan))))

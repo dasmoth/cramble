@@ -14,7 +14,7 @@
         (recur rest len (inc cur-code) (assoc code (bit-or cur-code (bit-shift-left len 28)) val))
         code))))
 
-(defn- huffdecode [code shortest-code bs]
+(defn- huffdecode [code shortest-code bs _]
   (loop [len  shortest-code
          k    (if-not (zero? shortest-code) (read-bits bs shortest-code) 0)]
     (or (code (bit-or k (bit-shift-left len 28)))
@@ -34,8 +34,6 @@
 ; 8 golomb_rice
 ; 9 gamma
 
-(def ^:dynamic *external-data*)
-
 (defmulti read-int-encoding* (fn [e stream] e))
 
 (defmethod read-int-encoding* 0 [_ stream]
@@ -43,8 +41,8 @@
 
 (defmethod read-int-encoding* 1 [_ stream]
   (let [blk (read-itf8 stream)]
-    (fn [_]
-      (read-itf8 (*external-data* blk)))))
+    (fn [_ external]
+      (read-itf8 (external blk)))))
 
 (defmethod read-int-encoding* 3 [_ stream]
   (let [alphabet (read-array read-itf8 stream)
@@ -54,12 +52,12 @@
 (defmethod read-int-encoding* 6 [_ stream]
   (let [offset (read-itf8 stream)
         length (read-itf8 stream)]
-    (fn [bs]
+    (fn [bs _]
       (+ offset (read-bits bs length)))))
 
 (defmethod read-int-encoding* 9 [_ stream]
   (let [offset (read-itf8 stream)]
-    (fn [bs]
+    (fn [bs _]
       (let [cnt (loop [bits 0]
                   (if (zero? (read-bits bs 1))
                     (recur (inc bits))
@@ -84,8 +82,8 @@
 
 (defmethod read-byte-encoding* 1 [_ stream]
   (let [blk (read-itf8 stream)]
-    (fn [_]
-      (read-byte (*external-data* blk)))))
+    (fn [_ external]
+      (read-byte (external blk)))))
 
 (defmethod read-byte-encoding* 3 [_ stream]
   (let [alphabet (read-array read-byte stream)
@@ -105,7 +103,7 @@
 (defmethod read-byte-array-encoding* 4 [_ stream]
   (let [lengths-encoding (read-int-encoding stream)
         values-encoding  (read-byte-encoding stream)]
-    (fn [bs]
+    (fn [bs _]
       (let [len (lengths-encoding bs)]
         (vec (for [i (range len)]
                (values-encoding bs)))))))

@@ -46,8 +46,11 @@
   (skip-bytes [_ cnt]
     (set! pos (+ pos cnt))))
   
-(defn make-binary-stream [buffer]
-  (ByteBufferStream. (js/Uint8Array. buffer) 0))
+(defn make-binary-stream 
+  ([buffer]
+   (make-binary-stream buffer 0))
+  ([buffer offset]  
+   (ByteBufferStream. (js/Uint8Array. buffer) offset)))
 
 (defn read-itf8 
   "Read an ITF8-encoded integer (between 1 and 5 bytes) from `stream`."

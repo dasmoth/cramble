@@ -2,11 +2,21 @@
   (:require [cljs.core.async :refer [put! close! chan]]
             [cramble.fetch :refer (get-binary-range)]
             [cramble.bin :as b]
+            [cramble.bits :as bits]
             [clojure.string :as str]
             [cramble.encodings :as enc]
+            [cramble.decode :as dec]
             [clojure.browser.repl :as repl]
             [jszlib :as zlib])
   (:require-macros [cljs.core.async.macros :refer [go]]))
+
+(defrecord CRAIRecord 
+    [seq-id 
+     ali-start 
+     ali-span 
+     container-start 
+     slice-start
+     slice-len])
 
 (def fromCharCode (.-fromCharCode js/String))
 
@@ -21,12 +31,36 @@
         type       (b/read-byte stream)
         content-id (b/read-itf8 stream)
         size       (b/read-itf8 stream)
-        rawsize    (b/read-itf8 stream)]
+        rawsize    (b/read-itf8 stream)
+        offset     (b/tell stream)]
     {:method      method
      :type        type
      :content-id  content-id
      :size        size
-     :raw-size    rawsize}))
+     :raw-size    rawsize
+     :offset      offset}))
+
+(defn- block-content [data offset header & {:keys [stream] :or {stream :bytes}}]
+  (let [[data offset] (case (:method header)
+                        0
+                        [data (+ offset (:offset header))]
+
+                        1
+                        [(js/jszlib_inflate_buffer data (+ offset (:offset header))) 0]
+                        
+                        2
+                        (throw (js/Error. "Currently don't support BZIP2"))
+                        
+                        ;; default
+                        (throw (js/Error. (str "Unknown compression method " (:method header)))))]
+    (case stream
+      :bytes
+      (b/make-binary-stream data offset)
+
+      :bits
+      (bits/make-bit-stream data offset)
+
+      (throw (js/Error. (str "Unknown stream type " stream))))))
 
 (defn- parse-container [blk]
   (let [length        (b/read-int blk)
@@ -57,7 +91,6 @@
         result
         (let [key (key-reader stream)
               fmt (fmtmap key)]
-          (println key)
           (if fmt
             (recur 
              (inc cnt)
@@ -124,7 +157,9 @@
                            (bit-and (bit-shift-right k 16) 0xff)
                            (bit-and (bit-shift-right k 8) 0xff)
                            (bit-and k 0xff))))
-                    (constantly enc/read-byte-array-encoding))]
+                    (constantly enc/read-byte-array-encoding))
+        offset (b/tell data)]
+    
     {:pres-map pres-map
      :dse-map  dse-map
      :tag-map  tag-map}))
@@ -132,7 +167,6 @@
 
 (defn read-container
   [uri offset]
-  (println "In read-container" uri offset)
   (go
     (let [ch-data     (->> (get-binary-range uri offset (+ offset 1000))
                            (<!)
@@ -185,14 +219,6 @@
           :bam-header bam-header
           :c2-offset c2-start})))))
   
-(defrecord CRAIRecord 
-    [seq-id 
-     ali-start 
-     ali-span 
-     container-start 
-     slice-start
-     slice-len])
-  
 (defn read-crai
   [uri]
   (go
@@ -214,3 +240,41 @@
            (js/parseInt container-start)
            (js/parseInt slice-start)
            (js/parseInt slice-len))))))))
+
+
+(defn- parse-slice-header [data]
+  (let [ref-id        (b/read-itf8 data)
+        align-start   (b/read-itf8 data)
+        align-span    (b/read-itf8 data)
+        num-records   (b/read-itf8 data)
+        rcd-counter   (b/read-itf8 data)
+        num-blocks    (b/read-itf8 data)
+        block-ids     (b/read-array b/read-itf8 data)
+        embed-ref     (b/read-itf8 data)
+        ref-md5       (str/join
+                       (for [i (range 16)]
+                         (.toString (b/read-byte data) 16)))]
+    {:ref-id      ref-id
+     :align-start align-start
+     :align-span  align-span
+     :num-records num-records
+     :rcd-counter rcd-counter
+     :num-blocks  num-blocks
+     :block-ids   block-ids
+     :embed-ref   embed-ref
+     :ref-md5     ref-md5}))
+
+
+(defn read-slice [cram slice]
+  (go
+    (let [{:keys [uri]} cram
+          {:keys [container-start slice-start slice-len]} slice
+          slice-start (+ container-start slice-start 19) ;; actually need to read container first...
+          data (<! (get-binary-range uri 
+                                     slice-start 
+                                     (+ slice-start slice-len)))
+          slice-block (parse-block (b/make-binary-stream data))
+          slice-header-data (block-content data 0 slice-block)
+          slice-header (parse-slice-header slice-header-data)]
+      slice-header)))
+      

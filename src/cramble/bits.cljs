@@ -28,5 +28,8 @@
         (bit-or (bit-shift-left val (- n take))
                 (read-bits this (- n take)))))))
 
-(defn make-bit-stream [buf]
-  (ByteBufferBitStream. (js/Uint8Array. buf) 0 0))
+(defn make-bit-stream 
+  ([buf]
+   (make-bit-stream buf 0))
+  ([buf offset]
+   (ByteBufferBitStream. (js/Uint8Array. buf) offset 0)))
