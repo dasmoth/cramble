@@ -3,6 +3,7 @@
             [cramble.fetch :refer (get-binary-range)]
             [cramble.bin :as b]
             [cramble.bits :as bits]
+            [cramble.utils :refer (array-to-string read-nstr)]
             [clojure.string :as str]
             [cramble.encodings :as enc]
             [cramble.decode :as dec]
@@ -17,18 +18,6 @@
      container-start 
      slice-start
      slice-len])
-
-(def fromCharCode (.-fromCharCode js/String))
-
-(defn array-to-string 
-  "Convert the bytes in `ba` to a String."
-  [ba]
-  (.apply fromCharCode nil ba))
-
-(defn read-nstr 
-  "Read `n` bytes from `stream` as a String."
-  [n stream]
-  (.apply fromCharCode nil (clj->js (for [i (range n)] (b/read-byte stream)))))
 
 (defn- parse-block [stream]
   (let [method     (b/read-byte stream)
@@ -298,6 +287,11 @@
                                 (assoc alts (:content-id block) data)
                                 (+ (:offset block) (:size block))))
                        alts))
-          decoder (dec/make-decoder (:dse-map cont) code-data alt-data)]
-      slice-header)))
+          decoder (dec/make-decoder (:dse-map (:comp cont)) core-data alt-data)]
+      (try
+        (vec 
+         (for [i (range 5)]
+           (dec/decode-record decoder)))
+        (catch js/Error e
+          (println "error" (.-stack e)))))))
       

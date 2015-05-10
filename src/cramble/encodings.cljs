@@ -103,10 +103,10 @@
 (defmethod read-byte-array-encoding* 4 [_ stream]
   (let [lengths-encoding (read-int-encoding stream)
         values-encoding  (read-byte-encoding stream)]
-    (fn [bs _]
+    (fn [bs external]
       (let [len (lengths-encoding bs)]
         (vec (for [i (range len)]
-               (values-encoding bs)))))))
+               (values-encoding bs external)))))))
 
 (defmethod read-byte-array-encoding* 5 [_ stream]
   (let [stop-byte (read-byte stream)
