@@ -20,10 +20,14 @@
 
 (def fromCharCode (.-fromCharCode js/String))
 
-(defn array-to-string [ba]
+(defn array-to-string 
+  "Convert the bytes in `ba` to a String."
+  [ba]
   (.apply fromCharCode nil ba))
 
-(defn read-nstr [n stream]
+(defn read-nstr 
+  "Read `n` bytes from `stream` as a String."
+  [n stream]
   (.apply fromCharCode nil (clj->js (for [i (range n)] (b/read-byte stream)))))
 
 (defn- parse-block [stream]
@@ -43,10 +47,10 @@
 (defn- block-content [data offset header & {:keys [stream] :or {stream :bytes}}]
   (let [[data offset] (case (:method header)
                         0
-                        [data (+ offset (:offset header))]
+                        [data (:offset header)]
 
                         1
-                        [(js/jszlib_inflate_buffer data (+ offset (:offset header))) 0]
+                        [(js/jszlib_inflate_buffer data (+ (:offset header) 10)) 0]
                         
                         2
                         (throw (js/Error. "Currently don't support BZIP2"))
@@ -172,12 +176,14 @@
                            (<!)
                            (b/make-binary-stream))
           header      (parse-container ch-data)
+          content-start (b/tell ch-data)
           b1-head     (parse-block ch-data)
           b1-start    (+ offset (b/tell ch-data))
           comp-header (->> (get-binary-range uri b1-start (+ b1-start (:size b1-head)))
                            (<!)
                            (parse-comp-header))]
-      (assoc header :comp comp-header))))
+      (assoc header :comp comp-header
+                    :content-start content-start))))
 
 (defn read-cram
   "Read headers from a CRAM file at uri.  Returns a promise channel which will
@@ -269,12 +275,29 @@
   (go
     (let [{:keys [uri]} cram
           {:keys [container-start slice-start slice-len]} slice
-          slice-start (+ container-start slice-start 19) ;; actually need to read container first...
+          cont (<! (read-container uri container-start)) ;; should probably cache the last few?
+          slice-start (+ container-start (:content-start cont) slice-start)
           data (<! (get-binary-range uri 
                                      slice-start 
                                      (+ slice-start slice-len)))
           slice-block (parse-block (b/make-binary-stream data))
           slice-header-data (block-content data 0 slice-block)
-          slice-header (parse-slice-header slice-header-data)]
+          slice-header (parse-slice-header slice-header-data)
+
+          core-block-start (+ (:offset slice-block) (:size slice-block))
+          core-block (parse-block (b/make-binary-stream data core-block-start))
+          core-data (block-content data core-block-start core-block :stream :bits)
+
+          alt-data (loop [[a & rest] (rest (:block-ids slice-header))
+                          alts {}
+                          offset (+ (:offset core-block) (:size core-block))]
+                     (if a
+                       (let [block (parse-block (b/make-binary-stream data offset))
+                             data (block-content data offset block)]
+                         (recur rest 
+                                (assoc alts (:content-id block) data)
+                                (+ (:offset block) (:size block))))
+                       alts))
+          decoder (dec/make-decoder (:dse-map cont) code-data alt-data)]
       slice-header)))
       
