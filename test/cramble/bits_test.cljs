@@ -1,7 +1,6 @@
 (ns cramble.bits-test
-  (:require-macros [cemerick.cljs.test
-                    :refer (is deftest with-test run-tests testing test-var)])
-  (:require [cemerick.cljs.test :as t]
+  (:require [cljs.test
+             :refer-macros (is deftest testing)]
             [cramble.bits :refer (read-bits make-bit-stream)]))
 
 (deftest bit-stream
