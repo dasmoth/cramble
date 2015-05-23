@@ -1,6 +1,7 @@
 *~
 target
 out
+resources/out
 .nrepl-port
 pom.xml
 .lein-repl-history
