@@ -100,7 +100,7 @@
    "SM" (fn [stream]
           (vec (for [i (range 5)] (b/read-byte stream))))})
 
-(def ^:private dse-map-format*
+(def ^:private dse-map-format-old*
   {"BF" enc/read-int-encoding
    "AP" enc/read-int-encoding
    "FP" enc/read-int-encoding
@@ -129,13 +129,45 @@
    "HC" enc/read-int-encoding
    "SC" enc/read-byte-array-encoding})
 
+(def ^:private dse-map-format*
+  {"BF" enc/read-int-encoding
+   "AP" enc/read-int-encoding
+   "FP" enc/read-int-encoding
+   "RL" enc/read-int-encoding
+   "DL" enc/read-int-encoding
+   "NF" enc/read-int-encoding
+   "BA" enc/read-byte-encoding
+   "QS" enc/read-byte-encoding
+   "FC" enc/read-byte-encoding
+   "FN" enc/read-int-encoding
+   "BS" enc/read-byte-encoding
+   "IN" enc/read-byte-array-encoding
+   "RG" enc/read-int-encoding
+   "MQ" enc/read-int-encoding
+   "TL" enc/read-int-encoding
+   "RN" enc/read-byte-array-encoding
+   "NS" enc/read-int-encoding
+   "NP" enc/read-int-encoding
+   "TS" enc/read-int-encoding
+   "MF" enc/read-int-encoding
+   "CF" enc/read-byte-encoding
+   "TM" enc/read-int-encoding
+   "RI" enc/read-int-encoding
+   "RS" enc/read-int-encoding
+   "PD" enc/read-int-encoding
+   "HC" enc/read-int-encoding
+   "SC" enc/read-byte-array-encoding
+   "TC" enc/read-byte-encoding
+   "TN" enc/read-int-encoding})
+
+
 (defn- dse-map-format [key]
   (or (dse-map-format* key)
       (fn [stream]
         (let [e (b/read-byte stream)
               param-len (b/read-itf8 stream)]
           (b/skip-bytes stream param-len)
-          {:type :unknown :e e}))))
+          (println {:key key :type :unknown :e e})))))
 
 (defn parse-comp-header [data]
   (let [data     (b/make-binary-stream data)
@@ -152,7 +184,6 @@
                            (bit-and k 0xff))))
                     (constantly enc/read-byte-array-encoding))
         offset (b/tell data)]
-    
     {:pres-map pres-map
      :dse-map  dse-map
      :tag-map  tag-map}))
@@ -289,9 +320,16 @@
                        alts))
           decoder (dec/make-decoder (:dse-map (:comp cont)) core-data alt-data)]
       (try
-        (vec 
-         (for [i (range 5)]
-           (dec/decode-record decoder)))
+        (loop [cnt  (:num-records slice-header)
+               pos  (:align-start slice-header)
+               rcds []]
+          (if (> cnt 0)
+            (let [r (dec/decode-record decoder pos)]
+              (recur 
+               (dec cnt) 
+               (:align-start r)  ;; Do we need to do something special if `r` is unmapped?
+               (conj rcds r)))
+            rcds))
         (catch js/Error e
           (println "error" (.-stack e)))))))
       

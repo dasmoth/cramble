@@ -35,7 +35,6 @@
   (r-soft-clip         [_]  "Soft-clipped bases (byte[])"))                   ;; SC
 
 (defn make-decoder [dse-map core-stream alt-streams]
-  (println "Alts " (keys alt-streams))
   (let [{:strs [BF AP FP RL DL NF BA QS FC FN
                 BS IN RG MQ TL RN NS NP TS
                 MF CF TM RI RS PD HC SC]}
@@ -71,8 +70,8 @@
       (r-soft-clip [_]          (SC core-stream alt-streams)))))
       
 (defn- decode-feature [d]
-  (let [pos  (r-feature-pos d)
-        code (r-feature-code d)
+  (let [code (r-feature-code d)
+        pos (r-feature-pos d)
         f    {:pos pos}]
     (case code
       0x42
@@ -106,7 +105,7 @@
 
       0x53
       (assoc f
-        :soft-clip (r-soft-clip d))
+        :soft-clip (array-to-string (clj->js (r-soft-clip d))))
 
       0x50
       (assoc f
@@ -119,7 +118,7 @@
       ;; default
       (throw (js/Error. (str "Unknown seq-feature type " code))))))
 
-(defn decode-record [d]
+(defn decode-record [d start-pos]
   (let [cram-flags     (r-bit-flags d)
         comp-flags     (r-compression-flags d)
         ref-id         (if false
@@ -156,7 +155,7 @@
      :comp-flags comp-flags
      :ref-id ref-id
      :read-len read-len
-     :align-start align-start
+     :align-start (+ start-pos align-start)
      :read-group read-group
      :qual-score qual-score
      :read-name  read-name

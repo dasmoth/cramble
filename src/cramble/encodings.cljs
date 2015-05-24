@@ -11,13 +11,15 @@
                      (bit-shift-left cur-code (- len cur-len))
                      cur-code)]
       (if len
-        (recur rest len (inc cur-code) (assoc code (bit-or cur-code (bit-shift-left len 28)) val))
+        (do
+          #_(println len "_" cur-code " -> " val)
+          (recur rest len (inc cur-code) (assoc code (bit-or cur-code (bit-shift-left len 24)) val)))
         code))))
 
 (defn- huffdecode [code shortest-code bs _]
   (loop [len  shortest-code
          k    (if-not (zero? shortest-code) (read-bits bs shortest-code) 0)]
-    (or (code (bit-or k (bit-shift-left len 28)))
+    (or (code (bit-or k (bit-shift-left len 24)))
         (recur (inc len)
                (bit-or 
                 (bit-shift-left k 1)
@@ -111,9 +113,17 @@
 (defmethod read-byte-array-encoding* 5 [_ stream]
   (let [stop-byte (read-byte stream)
         external-id (read-itf8 stream)]
-    {:type :byte-array-stop
-     :stop-byte stop-byte
-     :external-id external-id}))
+    (fn [bs external]
+      (let [external (external external-id)]
+        (loop [d []]
+          (let [b (read-byte external)]
+            (if (or (nil? b)
+                    (= b stop-byte))
+              d
+              (recur (conj d b)))))))))
+
+(defmethod read-byte-array-encoding* :default [e stream]
+  (throw (js/Error. (str "Unknown byte array encoding " e))))
 
 (defn read-byte-array-encoding [stream]
   (let [e          (read-byte stream)

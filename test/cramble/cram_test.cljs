@@ -34,8 +34,10 @@
   (go
     (let [cram (<! (read-cram "http://www.biodalliance.org/datasets/cramtests/tiny.cram"))
           crai (<! (read-crai "http://www.biodalliance.org/datasets/cramtests/tiny.cram.crai"))
-          slice-header (<! (read-slice cram (first crai)))]
-      (is slice-header)
-      (println slice-header)
+          slice-data (<! (read-slice cram (first crai)))]
+      (is slice-data)
+      (doseq [r (take 10 (drop 80 slice-data))]
+        (println r)
+        (println))
       (done)))))
       
