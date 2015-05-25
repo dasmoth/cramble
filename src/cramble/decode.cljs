@@ -69,7 +69,7 @@
       (r-hard-clip [_]          (HC core-stream alt-streams))
       (r-soft-clip [_]          (SC core-stream alt-streams)))))
       
-(defn- decode-feature [d]
+(defn- decode-feature [^CRAMDecoder d]
   (let [code (r-feature-code d)
         pos (r-feature-pos d)
         f    {:pos pos}]
@@ -105,7 +105,7 @@
 
       0x53
       (assoc f
-        :soft-clip (array-to-string (clj->js (r-soft-clip d))))
+        :soft-clip (array-to-string (r-soft-clip d)))
 
       0x50
       (assoc f
@@ -116,7 +116,7 @@
         :hard-clip (r-hard-clip d))
 
       ;; default
-      (throw (js/Error. (str "Unknown seq-feature type " code))))))
+      (throw "x")))); (js/Error. (str "Unknown seq-feature type " code))))))
 
 (defn decode-record [d start-pos]
   (let [cram-flags     (r-bit-flags d)
@@ -129,11 +129,11 @@
         qual-score     (if false
                          (r-qual-score d))
         read-name      (if false
-                         (array-to-string (clj->js (r-read-name d))))
+                         (array-to-string (r-read-name d)))
         mate           (cond
                          (not= (bit-and comp-flags 0x2) 0)
                          (let [mate-flags     (r-mate-flags d)
-                               mate-name      (array-to-string (clj->js (r-read-name d)))
+                               mate-name      (array-to-string (r-read-name d))
                                mate-ref       (r-next-frag-seq d)
                                mate-start     (r-next-frag-pos d)
                                template-size  (r-template-size d)]
@@ -148,19 +148,23 @@
         tag-ids        (r-tag-ids d)
         ;; TBD tag data
         num-features   (r-feature-count d)
-        features       (vec (for [f (range num-features)]
-                              (decode-feature d)))
+        features       (if (> num-features 0)
+                         (loop [cnt num-features
+                                f []]
+                           (if (> cnt 0)
+                             (recur (dec cnt) (conj f (decode-feature d)))
+                             f)))
         map-quality    (r-mapping-quality d)]
-    {:cram-flags cram-flags
-     :comp-flags comp-flags
-     :ref-id ref-id
-     :read-len read-len
-     :align-start (+ start-pos align-start)
-     :read-group read-group
-     :qual-score qual-score
-     :read-name  read-name
+    #js {:cram-flags cram-flags
+     :comp_flags comp-flags
+     :ref_id ref-id
+     :read_len read-len
+     :align_start (+ start-pos align-start)
+     :read_group read-group
+     :qual_score qual-score
+     :read_name  read-name
      :mate mate
-     :tag-ids tag-ids
-     :num-features num-features
-     :map-qual map-quality
+     :tag_ids tag-ids
+     :num_features num-features
+     :map_qual map-quality
      :features features}))

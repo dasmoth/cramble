@@ -12,6 +12,7 @@
     :builds [{:id "dev"
               :source-paths ["src" "test"]
               :compiler {
+                :optimizations :advanced
                 :output-to "target/cljs/testable.js"
                 :source-map "target/cljs/testable.js.map"
                 :externs ["jszlib-externs.js"]

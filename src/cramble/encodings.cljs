@@ -106,21 +106,27 @@
   (let [lengths-encoding (read-int-encoding stream)
         values-encoding  (read-byte-encoding stream)]
     (fn [bs external]
-      (let [len (lengths-encoding bs)]
-        (vec (for [i (range len)]
-               (values-encoding bs external)))))))
+      (loop [len (lengths-encoding bs)
+             arr #js []]
+        (if (> len 0)
+          (do
+            (.push arr (values-encoding bs external))
+            (recur (dec len) arr))
+          arr)))))
 
 (defmethod read-byte-array-encoding* 5 [_ stream]
   (let [stop-byte (read-byte stream)
         external-id (read-itf8 stream)]
     (fn [bs external]
       (let [external (external external-id)]
-        (loop [d []]
+        (loop [d #js []]
           (let [b (read-byte external)]
             (if (or (nil? b)
                     (= b stop-byte))
               d
-              (recur (conj d b)))))))))
+              (do
+                (.push d b)
+                (recur d)))))))))
 
 (defmethod read-byte-array-encoding* :default [e stream]
   (throw (js/Error. (str "Unknown byte array encoding " e))))

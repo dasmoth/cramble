@@ -184,6 +184,7 @@
                            (bit-and k 0xff))))
                     (constantly enc/read-byte-array-encoding))
         offset (b/tell data)]
+    (println "TagMap" tag-map)
     {:pres-map pres-map
      :dse-map  dse-map
      :tag-map  tag-map}))
@@ -327,7 +328,8 @@
             (let [r (dec/decode-record decoder pos)]
               (recur 
                (dec cnt) 
-               (:align-start r)  ;; Do we need to do something special if `r` is unmapped?
+               (aget r "align_start")
+               ;(.-align_start r)  ;; Do we need to do something special if `r` is unmapped?
                (conj rcds r)))
             rcds))
         (catch js/Error e

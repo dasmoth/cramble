@@ -3,7 +3,7 @@
 (defprotocol IBitStream
   (read-bits [this n]))
 
-(deftype ByteBufferBitStream [ba ^:mutable pos ^:mutable bitpos]
+(deftype ByteBufferBitStream [ba ^:mutable ^long pos ^:mutable ^long bitpos]
   IBitStream
   (read-bits [this n]
     (let [take (min n (- 8 bitpos))

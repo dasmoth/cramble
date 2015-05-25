@@ -1,7 +1,7 @@
 (ns cramble.cram-test
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs.core.async :refer [put! close! chan]]
-            [cljs.test :refer-macros (is deftest testing async)]
+            [cljs.test :refer-macros (is deftest testing async run-tests)]
             [cramble.core :refer (read-cram read-container read-crai read-slice)]))
 
 (deftest test-bad-cram 
@@ -36,8 +36,29 @@
           crai (<! (read-crai "http://www.biodalliance.org/datasets/cramtests/tiny.cram.crai"))
           slice-data (<! (read-slice cram (first crai)))]
       (is slice-data)
-      (doseq [r (take 10 (drop 80 slice-data))]
+      #_(doseq [r (take 10 (drop 80 slice-data))]
         (println r)
         (println))
       (done)))))
       
+(deftest test-read-large
+ (async done
+  (go
+    (let [cram (<! (read-cram "http://www.biodalliance.org/datasets/cramtests/adipose.cram"))
+          crai (<! (read-crai "http://www.biodalliance.org/datasets/cramtests/adipose.cram.crai"))
+          slice-data (<! (read-slice cram (first crai)))]
+      (is slice-data)
+      (println "got" (count slice-data) "reads")
+      (doseq [r (take 10 slice-data)]
+        (println r)
+        (println))
+      (done)))))
+
+
+(defn run []
+  (run-tests 'cramble.cram-test))
+
+#_(enable-console-print!)
+#_(doseq [x (range 10)]
+  (println x)
+  (run))
