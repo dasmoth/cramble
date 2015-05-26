@@ -29,19 +29,31 @@
       (println crai)
       (done)))))
 
-(deftest test-read-slice
+#_(deftest test-read-slice
  (async done
   (go
     (let [cram (<! (read-cram "http://www.biodalliance.org/datasets/cramtests/tiny.cram"))
           crai (<! (read-crai "http://www.biodalliance.org/datasets/cramtests/tiny.cram.crai"))
           slice-data (<! (read-slice cram (first crai)))]
       (is slice-data)
-      #_(doseq [r (take 10 (drop 80 slice-data))]
+      (doseq [r (take 10 (drop 80 slice-data))]
+        (println r)
+        (println))
+      (done)))))
+
+(deftest test-read-slice-tagged
+ (async done
+  (go
+    (let [cram (<! (read-cram "http://www.biodalliance.org/datasets/cramtests/tiny-tagged.cram"))
+          crai (<! (read-crai "http://www.biodalliance.org/datasets/cramtests/tiny-tagged.cram.crai"))
+          slice-data (<! (read-slice cram (first crai)))]
+      (is slice-data)
+      (doseq [r (take 10 slice-data)]
         (println r)
         (println))
       (done)))))
       
-(deftest test-read-large
+#_(deftest test-read-large
  (async done
   (go
     (let [cram (<! (read-cram "http://www.biodalliance.org/datasets/cramtests/adipose.cram"))

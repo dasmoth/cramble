@@ -85,7 +85,10 @@
 (defmethod read-byte-encoding* 1 [_ stream]
   (let [blk (read-itf8 stream)]
     (fn [_ external]
-      (read-byte (external blk)))))
+      (let [eb (external blk)]
+        (if-not eb
+          (println "Couldn't find " blk " in " external))
+        (read-byte (external blk))))))
 
 (defmethod read-byte-encoding* 3 [_ stream]
   (let [alphabet (read-array read-byte stream)

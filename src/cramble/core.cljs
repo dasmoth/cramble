@@ -96,38 +96,19 @@
   {"RN" b/read-bool
    "AP" b/read-bool
    "RR" b/read-bool
-   "TD" (partial b/read-array b/read-byte)    ;; needs more?
+   "TD" (fn [stream]
+          (loop [td      (b/read-array b/read-byte stream)
+                 tagsets []]
+            (println td)
+            (if (seq td)
+              (let [[tags tail] (split-with (complement zero?) td)]
+                (recur
+                 (rest tail)
+                 (conj tagsets
+                   (map #(array-to-string (clj->js %)) (partition 3 tags)))))
+              tagsets)))
    "SM" (fn [stream]
           (vec (for [i (range 5)] (b/read-byte stream))))})
-
-(def ^:private dse-map-format-old*
-  {"BF" enc/read-int-encoding
-   "AP" enc/read-int-encoding
-   "FP" enc/read-int-encoding
-   "RL" enc/read-int-encoding
-   "DL" enc/read-int-encoding
-   "NF" enc/read-int-encoding
-   "BA" enc/read-byte-encoding
-   "QS" enc/read-byte-encoding
-   "FC" enc/read-byte-encoding
-   "FN" enc/read-int-encoding
-   "BS" enc/read-byte-encoding
-   "IN" enc/read-byte-array-encoding
-   "RG" enc/read-int-encoding
-   "MQ" enc/read-int-encoding
-   "TL" enc/read-int-encoding
-   "RN" enc/read-byte-array-encoding
-   "NS" enc/read-int-encoding
-   "NP" enc/read-int-encoding
-   "TS" enc/read-int-encoding
-   "MF" enc/read-int-encoding
-   "CF" enc/read-int-encoding
-   "TM" enc/read-int-encoding
-   "RI" enc/read-int-encoding
-   "RS" enc/read-int-encoding
-   "PD" enc/read-int-encoding
-   "HC" enc/read-int-encoding
-   "SC" enc/read-byte-array-encoding})
 
 (def ^:private dse-map-format*
   {"BF" enc/read-int-encoding
@@ -177,14 +158,15 @@
                     data
                     (fn [stream]
                       (let [k (b/read-itf8 stream)]
-                        (.fromCharArray 
+                        (.fromCharCode
                            js/String
                            (bit-and (bit-shift-right k 16) 0xff)
                            (bit-and (bit-shift-right k 8) 0xff)
                            (bit-and k 0xff))))
                     (constantly enc/read-byte-array-encoding))
         offset (b/tell data)]
-    (println "TagMap" tag-map)
+    (println "PresMap" pres-map)
+    (println "TagMap" (keys tag-map))
     {:pres-map pres-map
      :dse-map  dse-map
      :tag-map  tag-map}))
@@ -309,7 +291,7 @@
           core-block (parse-block (b/make-binary-stream data core-block-start))
           core-data (block-content data core-block-start core-block :stream :bits)
 
-          alt-data (loop [[a & rest] (rest (:block-ids slice-header))
+          alt-data (loop [[a & rest] (:block-ids slice-header)   ;; CHECK extra block in here somewhere?
                           alts {}
                           offset (+ (:offset core-block) (:size core-block))]
                      (if a
@@ -319,7 +301,13 @@
                                 (assoc alts (:content-id block) data)
                                 (+ (:offset block) (:size block))))
                        alts))
-          decoder (dec/make-decoder (:dse-map (:comp cont)) core-data alt-data)]
+          decoder (dec/make-decoder 
+                   (:dse-map (:comp cont)) 
+                   (:tag-map (:comp cont))
+                   (:pres-map (:comp cont))
+                   core-data 
+                   alt-data)]
+      (println slice-header)
       (try
         (loop [cnt  (:num-records slice-header)
                pos  (:align-start slice-header)

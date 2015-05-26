@@ -32,13 +32,18 @@
   (r-reference-skip    [_]  "Number of skipped bases for 'N' features (int)") ;; RS
   (r-padding           [_]  "Number of padded bases (int)")                   ;; PD
   (r-hard-clip         [_]  "Number of hard-clipped bases (int)")             ;; HC
-  (r-soft-clip         [_]  "Soft-clipped bases (byte[])"))                   ;; SC
+  (r-soft-clip         [_]  "Soft-clipped bases (byte[])")                    ;; SC
 
-(defn make-decoder [dse-map core-stream alt-streams]
+  (r-tags              [_ tag-ids]))
+
+(defn make-decoder [dse-map tag-map pres-map core-stream alt-streams]
   (let [{:strs [BF AP FP RL DL NF BA QS FC FN
                 BS IN RG MQ TL RN NS NP TS
                 MF CF TM RI RS PD HC SC]}
-        dse-map]
+        dse-map
+
+        {tag-lists "TD"}
+         pres-map]
     (reify 
       CRAMDecoder
       (r-bit-flags [_]          (BF core-stream alt-streams))
@@ -67,7 +72,18 @@
       (r-reference-skip [_]     (RS core-stream alt-streams))
       (r-padding [_]            (PD core-stream alt-streams))
       (r-hard-clip [_]          (HC core-stream alt-streams))
-      (r-soft-clip [_]          (SC core-stream alt-streams)))))
+      (r-soft-clip [_]          (SC core-stream alt-streams))
+
+      (r-tags [_ tag-ids]
+        (let [tag-list (tag-lists tag-ids)]
+          (if (seq tag-list)
+            (loop [[tag & tags] tag-list
+                   vals         #js {}]
+              (if tag
+                (do (aset vals tag ((tag-map tag) core-stream alt-streams))
+                    (recur tags vals))
+                vals)))))
+)))
       
 (defn- decode-feature [^CRAMDecoder d]
   (let [code (r-feature-code d)
@@ -116,7 +132,7 @@
         :hard-clip (r-hard-clip d))
 
       ;; default
-      (throw "x")))); (js/Error. (str "Unknown seq-feature type " code))))))
+      (throw (js/Error. (str "Unknown seq-feature type " code))))))
 
 (defn decode-record [d start-pos]
   (let [cram-flags     (r-bit-flags d)
@@ -146,6 +162,7 @@
                          (not= (bit-and comp-flags 0x4) 0)
                          (r-next-fragment d))
         tag-ids        (r-tag-ids d)
+        tags           (r-tags d tag-ids)
         ;; TBD tag data
         num-features   (r-feature-count d)
         features       (if (> num-features 0)
@@ -165,6 +182,7 @@
      :read_name  read-name
      :mate mate
      :tag_ids tag-ids
+     :tags tags
      :num_features num-features
      :map_qual map-quality
      :features features}))
