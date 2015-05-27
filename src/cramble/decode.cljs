@@ -1,7 +1,7 @@
 (ns cramble.decode
   (:require [cljs.core.async :refer [put! close! chan]]
             [cramble.bin :as b]
-            [cramble.utils :refer (array-to-string)]
+            [cramble.utils :refer (fromCharCode array-to-string)]
             [clojure.string :as str])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
@@ -80,8 +80,34 @@
             (loop [[tag & tags] tag-list
                    vals         #js {}]
               (if tag
-                (do (aset vals tag ((tag-map tag) core-stream alt-streams))
-                    (recur tags vals))
+                (let [vala ((tag-map tag) core-stream alt-streams)]
+                  (aset vals 
+                        (subs tag 0 2)
+                        (case (.charAt tag 2)
+                          "c"
+                          (aget vala 0)
+
+                          "s"
+                          (bit-or
+                                           (aget vala 0)
+                           (bit-shift-left (aget vala 1) 8))
+
+                          "i"
+                          (bit-or
+                                           (aget vala 0)
+                           (bit-shift-left (aget vala 1) 8)
+                           (bit-shift-left (aget vala 2) 16)
+                           (bit-shift-left (aget vala 3) 24))
+
+                          "A"
+                          (fromCharCode (aget vala 0))
+
+                          "Z"
+                          (array-to-string vala)
+
+                          ;; default
+                          vala))
+                  (recur tags vals))
                 vals)))))
 )))
       
@@ -163,7 +189,6 @@
                          (r-next-fragment d))
         tag-ids        (r-tag-ids d)
         tags           (r-tags d tag-ids)
-        ;; TBD tag data
         num-features   (r-feature-count d)
         features       (if (> num-features 0)
                          (loop [cnt num-features
