@@ -9,7 +9,9 @@
             [cramble.decode :as dec]
             [clojure.browser.repl :as repl]
             [jszlib :as zlib])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+
+(enable-console-print!)
 
 (defrecord CRAIRecord 
     [seq-id 
@@ -323,3 +325,23 @@
         (catch js/Error e
           (println "error" (.-stack e)))))))
       
+(defn read-region [cram crai req-seq-id start end]
+  (let [slices (filter (fn [{:keys [seq-id ali-start ali-span]}]
+                         (and (= seq-id req-seq-id)
+                              (<= ali-start end)
+                              (>= (+ ali-start ali-span) start)))
+                       crai)]
+    (println "Fetching " slices)
+    (go-loop [[slice & slices] slices
+              results []]
+      (if slice
+        (recur slices
+               (concat 
+                results
+                (filter (fn [read]
+                          (let [ali-start (aget read "align_start")
+                                ali-end (+ ali-start (aget read "read_len"))]
+                            (and (<= ali-start end)
+                                 (>= ali-end start))))
+                        (<! (read-slice cram slice)))))
+        results))))
